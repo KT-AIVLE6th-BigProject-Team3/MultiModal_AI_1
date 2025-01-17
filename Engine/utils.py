@@ -2,8 +2,10 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
-
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 from tqdm.auto import tqdm
+import matplotlib.pyplot as plt
+
 def train_step(model:torch.nn.Module,
                train_loader:torch.utils.data.DataLoader,
                loss_fn: torch.nn.Module,
@@ -72,3 +74,24 @@ class FocalLoss(nn.Module):
         pt = torch.exp(-ce_loss)  # 예측 확률
         focal_loss = self.alpha * ((1 - pt) ** self.gamma) * ce_loss
         return focal_loss.mean()
+    
+def Evaluation_Classification_Model(model,test_dataloader,title_name:str):
+    """평가하려는 분류모델의 Classification_reports와 Confusion_Matrix를 시각화화"""
+    y_true = torch.tensor([]).to(device='cuda')
+    y_pred = torch.tensor([]).to(device='cuda')
+
+    with torch.inference_mode():
+        model.eval()
+        for images,features,targets in tqdm(test_dataloader):
+            images, features, targets = images.to('cuda'), features.to('cuda'), targets.to('cuda')
+            predictions = torch.argmax(F.softmax(model(images,features),dim=1),dim=1)
+            y_pred = torch.cat((y_pred, predictions))
+            y_true = torch.cat((y_true, targets))
+            
+    y_true = y_true.cpu()
+    y_pred = y_pred.cpu()
+    cm = confusion_matrix(y_true,y_pred)
+    ConfusionMatrixDisplay(cm).plot(cmap='Blues')
+    plt.title(f"ConfusionMatrix_{title_name}")
+    plt.savefig(f'ConfusionMatrix_{title_name}.png')
+    print(classification_report(y_true,y_pred))
