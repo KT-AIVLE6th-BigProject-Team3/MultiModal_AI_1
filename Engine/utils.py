@@ -76,7 +76,7 @@ class FocalLoss(nn.Module):
         return focal_loss.mean()
     
 def Evaluation_Classification_Model(model,test_dataloader,title_name:str):
-    """평가하려는 분류모델의 Classification_reports와 Confusion_Matrix를 시각화화"""
+    """평가하려는 분류모델의 Classification_reports와 Confusion_Matrix를 시각화"""
     y_true = torch.tensor([]).to(device='cuda')
     y_pred = torch.tensor([]).to(device='cuda')
 
