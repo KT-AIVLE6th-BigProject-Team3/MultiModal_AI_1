@@ -28,8 +28,6 @@ def sort_and_list(root_raw_path:str,root_label_path:str,number:str,recursive_pat
     label_json_files = glob(target_label_path+'\*.json')
     return bin_files,features_files,label_json_files
 
-print(sort_and_list(root_raw_path,root_label_path,))
-
 def transition_json_to_dataframe(label_json_files:list):
     """json파일의 라벨링 데이터가 담긴 리스트로 부터 각각의 json파일로부터 필요한 외부 데이터(외부온도, 외부습도, 조도)와 정답 데이터(state) 파싱"""
     dataframe = pd.DataFrame()
@@ -40,7 +38,13 @@ def transition_json_to_dataframe(label_json_files:list):
             ex_temperature = data['external_data'][0]['ex_temperature'][0]['value']
             ex_humidity = data['external_data'][0]['ex_humidity'][0]['value']
             ex_illuminance = data['external_data'][0]['ex_illuminance'][0]['value']
-            temp = pd.DataFrame({'ex_temperature':[ex_temperature],'ex_humidity':[ex_humidity],'ex_illuminance':[ex_illuminance],'state':[state]})
+            device_name = data['meta_info'][0]['device_name']
+            collection_date = data['meta_info'][0]['collection_date']
+            collection_time = data['meta_info'][0]['collection_time']
+            cumulative_operating_day = data['meta_info'][0]['cumulative_operating_day']
+            temp = pd.DataFrame({'device_name':[device_name],'collection_date': [collection_date], 'collection_time':[collection_time], 
+                                 'cumulative_operating_day':[cumulative_operating_day],'ex_temperature':[ex_temperature],'ex_humidity':[ex_humidity],
+                                 'ex_illuminance':[ex_illuminance],'state':[state]})
             dataframe = pd.concat([dataframe,temp],ignore_index=True)
     return dataframe
 
