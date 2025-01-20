@@ -2,13 +2,15 @@ from MultiModal.dataset import MultimodalDataset
 from MultiModal.model import CrossAttention, SoftLabelEncoder, ViTFeatureExtractor, ConditionClassifier
 from torch.utils.data import DataLoader
 import joblib
+import pandas as pd
 import torch
 import joblib
 from Engine.utils import Evaluation_Classification_Model
 import torch.nn.functional as F
-# from warnings import filterwarnings
-# filterwarnings(action='ignore')
+from warnings import filterwarnings
+filterwarnings(action='ignore')
 from sklearn.model_selection import train_test_split
+from sqlalchemy import create_engine
 
 device = 'cuda' # GPU 설정 | GPU가 없으면 'cpu'로 바꿔주세요.
 
@@ -20,6 +22,12 @@ num_heads = 4
 depth = 6
 aux_input_dim = 11  # 보조 데이터 차원 (예: 온도, 습도 등)
 num_classes = 4  # 0:정상,1:관심,2:주의,3:위험
+
+# 2. MySQL 연결 정보 설정
+user = 'root' # MySQL 사용자명
+password = '0000' # Mysql 비밀번호
+host = 'localhost' # MYSQL 서버 주소
+database = 'sensor_data' # 데이터 베이스 이름
 
 ## 최적화 모델 불러오기
 def load_AGV_model(Model_Parameter='Parameters/AGV_Best_State_Model.pth'):
@@ -35,22 +43,32 @@ def load_OHT_model(Model_Parameter='Parameters/OHT_Best_State_Model.pth'):
 AGVConditionClassifier = load_AGV_model()
 OHTConditionClassifier = load_OHT_model()
 
-## 데이터 파이프라인 구축
+def connect_sql(user,password,host,database):
+    engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}/{database}")    
+    return engine
+
+def read_table_from_sql(engine,table_name):
+        # AGV 테이블 데이터 읽기
+    query = f"SELECT * FROM {table_name}"
+    df = pd.read_sql(query, engine)
+    return df
+
+
+# 데이터 파이프라인 구축
 seperate_col = ['device_id','collection_date','collection_time','cumulative_operating_day','state']
 agv_dataset = joblib.load('DataFrame/agv_dataframe_version_2.pkl') # 데이터 프레임 불러오기
 agv_X, agv_y = agv_dataset.drop(columns=seperate_col),agv_dataset['state'] # X,y 분리 (X는 이미지 + 센서 데이터, y는 state(정답값))
 _, agv_X_test, _, agv_y_test = train_test_split(agv_X,agv_y,test_size=0.3,shuffle=False) # 모델은 이미 X_train은 학습했으므로 X_test만 필요
 
+# oht_dataset = joblib.load('DataFrame/oht_dataframe_version_2.pkl') # 데이터 프레임 불러오기
+# oht_X, oht_y = oht_dataset.drop(columns=seperate_col),oht_dataset['state'] # X,y 분리 (X는 이미지 + 센서 데이터, y는 state(정답값))
+# _,oht_X_test,_,oht_y_test = train_test_split(oht_X,oht_y,test_size=0.3,shuffle=False) # 모델은 이미 X_train은 학습했으므로 X_test만 필요
 
-oht_dataset = joblib.load('DataFrame/oht_dataframe_version_2.pkl') # 데이터 프레임 불러오기
-oht_X, oht_y = oht_dataset.drop(columns=seperate_col),oht_dataset['state'] # X,y 분리 (X는 이미지 + 센서 데이터, y는 state(정답값))
-_,oht_X_test,_,oht_y_test = train_test_split(oht_X,oht_y,test_size=0.3,shuffle=False) # 모델은 이미 X_train은 학습했으므로 X_test만 필요
+# agv_test_dataset = MultimodalDataset(agv_X_test,agv_y_test) # 파이토치 멀티모달 데이터셋 선언
+# oht_test_dataset = MultimodalDataset(oht_X_test,oht_y_test) # 파이토치 멀티모달 데이터셋 선언
 
-agv_test_dataset = MultimodalDataset(agv_X_test,agv_y_test) # 파이토치 멀티모달 데이터셋 선언
-oht_test_dataset = MultimodalDataset(oht_X_test,oht_y_test) # 파이토치 멀티모달 데이터셋 선언
-
-agv_test_dataloader = DataLoader(agv_test_dataset,batch_size=16,shuffle=False) # agv_test_dataloader (데이터 파이프라인) 선언 # 배치 사이즈는 마음대로 정할 수 있습니다.
-oht_test_dataloader = DataLoader(oht_test_dataset,batch_size=16,shuffle=False) # oht_test_dataloader (데이터 파이프라인) 선언
+# agv_test_dataloader = DataLoader(agv_test_dataset,batch_size=16,shuffle=False) # agv_test_dataloader (데이터 파이프라인) 선언 # 배치 사이즈는 마음대로 정할 수 있습니다.
+# oht_test_dataloader = DataLoader(oht_test_dataset,batch_size=16,shuffle=False) # oht_test_dataloader (데이터 파이프라인) 선언
 
 ## batch_size를 4로 입력하면 dataloader에서 image: [4,1,120,160]: 열화상 이미지 (흑백) 4장 | 센서데이터(칼럼 11개): [4,11] 4행 11열의 데이터 | target: [4,1]가 만들어집니다.
 # agv_test_dataloader = iter(agv_test_dataloader)
@@ -63,9 +81,22 @@ oht_test_dataloader = DataLoader(oht_test_dataset,batch_size=16,shuffle=False) #
 # dim은 1로 무조건 설정
 
 # AGV | OHT 평가
-oht_y_true, oht_y_pred = Evaluation_Classification_Model(OHTConditionClassifier,oht_test_dataloader,'OHTClassification') 
-agv_y_true, agv_y_pred = Evaluation_Classification_Model(AGVConditionClassifier,agv_test_dataloader,'AGVClassification')
+# oht_y_true, oht_y_pred = Evaluation_Classification_Model(OHTConditionClassifier,oht_test_dataloader,'OHTClassification') 
+# agv_y_true, agv_y_pred = Evaluation_Classification_Model(AGVConditionClassifier,agv_test_dataloader,'AGVClassification')
 
 ## 만약 Input type (torch.cuda.FloatTensor) and weight type should be the same 에러가 난다면
 ## 데이터와 모델이 같은 GPU 선상에 있어야한다는 의미이다.
 ## model.to('cpu') 나 data.to('cpu') 를 이용해서 두 환경을 맞춰주어야 평가가 진행이 됩니다.
+
+def connect_sql(user,password,host,database):
+    engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}/{database}")
+    
+    # AGV 테이블 데이터 읽기
+    agv_query = "SELECT * FROM AGV"
+    agv_df = pd.read_sql(agv_query, engine)
+
+    # OHT 테이블 데이터 읽기
+    oht_query = "SELECT * FROM OHT"
+    oht_df = pd.read_sql(oht_query, engine)
+    
+    return agv_df,oht_df
