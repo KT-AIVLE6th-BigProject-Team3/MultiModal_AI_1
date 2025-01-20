@@ -75,15 +75,18 @@ class FocalLoss(nn.Module):
         focal_loss = self.alpha * ((1 - pt) ** self.gamma) * ce_loss
         return focal_loss.mean()
     
-def Evaluation_Classification_Model(model,test_dataloader,title_name:str):
-    """평가하려는 분류모델의 Classification_reports와 Confusion_Matrix를 시각화"""
-    y_true = torch.tensor([]).to(device='cuda')
-    y_pred = torch.tensor([]).to(device='cuda')
+def Evaluation_Classification_Model(model,test_dataloader,title_name:str,device='cuda'):
+    """평가하려는 분류모델의 Classification_reports와 Confusion_Matrix를 시각화
+    return 정답값, 예측값 리스트
+    """
+    y_true = torch.tensor([]).to(device=device)
+    y_pred = torch.tensor([]).to(device=device)
 
     with torch.inference_mode():
         model.eval()
+        model = model.to(device)
         for images,features,targets in tqdm(test_dataloader):
-            images, features, targets = images.to('cuda'), features.to('cuda'), targets.to('cuda')
+            images, features, targets = images.to(device), features.to(device), targets.to(device)
             predictions = torch.argmax(F.softmax(model(images,features),dim=1),dim=1)
             y_pred = torch.cat((y_pred, predictions))
             y_true = torch.cat((y_true, targets))
@@ -95,3 +98,4 @@ def Evaluation_Classification_Model(model,test_dataloader,title_name:str):
     plt.title(f"ConfusionMatrix_{title_name}")
     plt.savefig(f'ConfusionMatrix_{title_name}.png')
     print(classification_report(y_true,y_pred))
+    return y_true,y_pred
